@@ -8,15 +8,19 @@
         <version>3.2.0-M1</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
+
     <groupId>bootiful</groupId>
     <artifactId>clients</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>clients</name>
     <description>Demo project for Spring Boot</description>
+    
     <properties>
+        <!-- This version enable jdbcClient & restClient -->
         <spring-framework.version>6.1.0-SNAPSHOT</spring-framework.version>
         <java.version>17</java.version>
     </properties>
+    
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -47,6 +51,7 @@
             </plugin>
         </plugins>
     </build>
+
     <repositories>
         <repository>
             <id>spring-milestones</id>

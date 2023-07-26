@@ -36,14 +36,17 @@ public class ClientsApplication {
         return args -> {
             RowMapper<Planet> planetRowMapper = (rs, rowNum) -> new Planet(rs.getString("name"), 0, 0, null, null, null, null, null, List.of(),
                     new String[0],  null , null, null);
-//            var kh = new GeneratedKeyHolder(List.of(Map.of("id", Integer.class)));
+
+//          var kh = new GeneratedKeyHolder(List.of(Map.of("id", Integer.class)));
+
             var planet = manual.planets(4);
             var updated = jdbcClient
                     .sql("insert into planet (name ) values(?)")
                     .params(List.of(planet.name()))
                     .update( );
             Assert.state(updated > 0, "there should have been one or more records updated");
-            jdbcClient.sql("select * from planet" )
+
+            jdbcClient.sql("select * from planet")
                     .query(planetRowMapper)
                     .list()
                     .forEach(System.out::println);
