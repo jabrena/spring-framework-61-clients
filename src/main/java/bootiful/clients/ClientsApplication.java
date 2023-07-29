@@ -1,103 +1,114 @@
 package bootiful.clients;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
-import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.util.Assert;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.support.RestClientAdapter;
-import org.springframework.web.service.annotation.GetExchange;
-import org.springframework.web.service.invoker.HttpServiceProxyFactory;
 
-import javax.sql.DataSource;
-import java.net.URL;
-import java.time.Instant;
+import java.io.NotSerializableException;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
+import java.util.Map;
 
 @SpringBootApplication
 public class ClientsApplication {
+
+    private static final Logger logger = LoggerFactory.getLogger(ClientsApplication.class);
 
     public static void main(String[] args) {
         SpringApplication.run(ClientsApplication.class, args);
     }
 
     @Bean
-    JdbcClient jdbcClient(DataSource dataSource) {
-        return JdbcClient.create(dataSource);
-    }
-
-    @Bean
-    ApplicationRunner runner(ManualStarWarsClient manual, AutoStarWarsClient auto, JdbcClient jdbcClient) {
+    ApplicationRunner runner(JdbcClient jdbcClient) {
         return args -> {
-            RowMapper<Planet> planetRowMapper = (rs, rowNum) -> new Planet(rs.getString("name"), 0, 0, null, null, null, null, null, List.of(),
-                    new String[0],  null , null, null);
+
+            insertExample(jdbcClient);
+            selectExample(jdbcClient, 1);
+            //insertExample2(jdbcClient);
+            deleteExample(jdbcClient);
+            selectExample(jdbcClient, 0);
 
 //          var kh = new GeneratedKeyHolder(List.of(Map.of("id", Integer.class)));
 
-            var planet = manual.planets(4);
-            var updated = jdbcClient
-                    .sql("insert into planet (name ) values(?)")
-                    .params(List.of(planet.name()))
-                    .update( );
-            Assert.state(updated > 0, "there should have been one or more records updated");
 
-            jdbcClient.sql("select * from planet")
-                    .query(planetRowMapper)
-                    .list()
-                    .forEach(System.out::println);
         };
     }
 
-    @Bean
-    RestClient restClient(RestClient.Builder builder) {
-        return builder.build();
+    private void insertExample(JdbcClient jdbcClient) {
+
+        logger.info("Insert Example");
+
+        var sqlStatement = """
+            INSERT INTO planet(name) VALUES(?)
+            """;
+        var updatedRows = jdbcClient
+                .sql(sqlStatement)
+                .params(List.of("Hoth"))
+                .update();
+        Assert.state(updatedRows == 1, "there should have been one or more records updated");
     }
 
-    @Bean
-    ManualStarWarsClient manual(RestClient client) {
-        return new ManualStarWarsClient(client);
+    private void selectExample(JdbcClient jdbcClient, int expectedCount) {
+
+        logger.info("Select Example");
+
+        var sqlStatement = """
+            SELECT * FROM planet
+            """;
+        RowMapper<Planet2> planetRowMapper = (rs, rowNum) -> new Planet2(
+                rs.getInt("id"),
+                rs.getString("name"));
+        var count = jdbcClient.sql(sqlStatement)
+                .query(planetRowMapper)
+                .list()
+                .stream()
+                .peek(p -> logger.info("{}", p))
+                .count();
+
+        Assert.state(count == expectedCount, "there should have been one or more records updated");
     }
 
-    @Bean
-    AutoStarWarsClient auto(RestClient client) {
-        return HttpServiceProxyFactory
-                .builderFor(RestClientAdapter.create(client))
-                .build()
-                .createClient(AutoStarWarsClient.class);
+    private void insertExample2(JdbcClient jdbcClient) {
+
+        logger.info("Insert Example 2");
+
+        var sqlStatement = """
+            INSERT INTO planet(name) VALUES(?);
+            SELECT IDENTITY();
+            """;
+
+        try {
+            var generatedKeyHolder = new GeneratedKeyHolder();
+            var updatedRows = jdbcClient
+                    .sql(sqlStatement)
+                    .params(List.of("Tatooine"))
+                    .update(generatedKeyHolder);
+
+            String id = generatedKeyHolder.getKeyAs(String.class);
+            logger.info("Returned Id: {}", id);
+
+            Assert.state(updatedRows == 1, "there should have been one or more records updated");
+        } catch (Exception e) {
+            logger.error("Katakroker");
+            logger.error(e.getLocalizedMessage());
+            logger.error(e.getCause().getClass().getName());
+        }
     }
-}
 
-record Planet(String name, int rotationPeriod, int orbitalPeriod, String climate, String gravity,
-              String terrain, String surfaceWater, String population, List<Object> residents, String[] films,
-              Instant created, Instant edited, URL url) {
-}
-
-class ManualStarWarsClient {
-
-    private final RestClient restClient;
-
-    ManualStarWarsClient(RestClient restClient) {
-        this.restClient = restClient;
+    private void deleteExample(JdbcClient jdbcClient) {
+        logger.info("Delete Example");
+        var sql = "DELETE FROM planet";
+        jdbcClient.sql(sql).update();
     }
-
-    Planet planets(int id) {
-        ResponseEntity<Planet> re = this.restClient
-                .get()
-                .uri("https://swapi.dev/api/planets/{planetId}/?format=json", id)
-                .retrieve()
-                .toEntity(Planet.class);
-        Assert.state(re.getStatusCode().is2xxSuccessful(), "the request was not successful");
-        return re.getBody();
-    }
-}
-
-interface AutoStarWarsClient {
-
-    @GetExchange("https://swapi.dev/api/planets/{planetId}/?format=json")
-    Planet planets(@PathVariable("planetId") int id);
 }
